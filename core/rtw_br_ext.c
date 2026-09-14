@@ -83,6 +83,8 @@
 -----------------------------------------------------------------*/
 
 
+/* Kernel 7.1+ hides flexible array members of pppoe structs from kernel space */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(7, 1, 0))
 /* Find a tag in pppoe frame and return the pointer */
 static unsigned char *__nat25_find_pppoe_tag(struct pppoe_hdr *ph, unsigned short type)
 {
@@ -100,7 +102,6 @@ static unsigned char *__nat25_find_pppoe_tag(struct pppoe_hdr *ph, unsigned shor
 	}
 	return 0;
 }
-
 
 static int __nat25_add_pppoe_tag(struct sk_buff *skb, struct pppoe_tag *tag)
 {
@@ -120,6 +121,7 @@ static int __nat25_add_pppoe_tag(struct sk_buff *skb, struct pppoe_tag *tag)
 	memcpy((unsigned char *)ph->tag, tag, data_len);
 	return data_len;
 }
+#endif // kernel < 7.1.0
 
 static int skb_pull_and_merge(struct sk_buff *skb, unsigned char *src, int len)
 {
@@ -1142,6 +1144,8 @@ int nat25_db_handle(_adapter *priv, struct sk_buff *skb, int method)
 						int old_tag_len = 0;
 
 						tag = (struct pppoe_tag *)tag_buf;
+					/* Kernel 7.1+ hides flexible array members of pppoe structs from kernel space */
+					#if (LINUX_VERSION_CODE < KERNEL_VERSION(7, 1, 0))
 						pOldTag = (struct pppoe_tag *)__nat25_find_pppoe_tag(ph, ntohs(PTT_RELAY_SID));
 						if (pOldTag) { /* if SID existed, copy old value and delete it */
 							old_tag_len = ntohs(pOldTag->tag_len);
@@ -1159,10 +1163,13 @@ int nat25_db_handle(_adapter *priv, struct sk_buff *skb, int method)
 							}
 							ph->length = htons(ntohs(ph->length) - TAG_HDR_LEN - old_tag_len);
 						}
+					#endif // kernel < 7.1.0
 
 						tag->tag_type = PTT_RELAY_SID;
 						tag->tag_len = htons(MAGIC_CODE_LEN + RTL_RELAY_TAG_LEN + old_tag_len);
 
+					/* Kernel 7.1+ hides flexible array members of pppoe structs from kernel space */
+					#if (LINUX_VERSION_CODE < KERNEL_VERSION(7, 1, 0))
 						/* insert the magic_code+client mac in relay tag */
 						pMagic = (unsigned short *)tag->tag_data;
 						*pMagic = htons(MAGIC_CODE);
@@ -1171,6 +1178,7 @@ int nat25_db_handle(_adapter *priv, struct sk_buff *skb, int method)
 						/* Add relay tag */
 						if (__nat25_add_pppoe_tag(skb, tag) < 0)
 							return -1;
+					#endif // kernel < 7.1.0
 
 						RTW_INFO("NAT25: Insert PPPoE, forward %s packet\n",
 							(ph->code == PADI_CODE ? "PADI" : "PADR"));
@@ -1207,6 +1215,8 @@ int nat25_db_handle(_adapter *priv, struct sk_buff *skb, int method)
 		case NAT25_LOOKUP:
 			if (ph->code == PADO_CODE || ph->code == PADS_CODE) {
 				if (priv->ethBrExtInfo.addPPPoETag) {
+				/* Kernel 7.1+ hides flexible array members of pppoe structs from kernel space */
+				#if (LINUX_VERSION_CODE < KERNEL_VERSION(7, 1, 0))
 					struct pppoe_tag *tag;
 					unsigned char *ptr;
 					unsigned short tagType, tagLen;
@@ -1249,6 +1259,7 @@ int nat25_db_handle(_adapter *priv, struct sk_buff *skb, int method)
 
 					RTW_INFO("NAT25: Lookup PPPoE, forward %s Packet from %s\n",
 						(ph->code == PADO_CODE ? "PADO" : "PADS"),	skb->dev->name);
+				#endif // kernel < 7.1.0
 				} else { /* not add relay tag */
 					if (!priv->pppoe_connection_in_progress) {
 						DEBUG_ERR("Discard PPPoE packet due to no connection in progresss!\n");
